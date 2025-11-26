@@ -1,5 +1,4 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { serverTimestamp } from "firebase/firestore";
 import {
   ArrowLeftIcon,
   PaperAirplaneIcon,
@@ -7,10 +6,9 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   getChatUserById,
-  getMessage,
+  getConversation,
   getChatUsers,
   sendMessage,
-  auth,
 } from "../../firebase/firebase";
 import { UserContext } from "../../context/user-context";
 import { useNavigate } from "react-router";
@@ -26,80 +24,39 @@ const ChatBox = () => {
   const [value, setValue] = useState("");
   const { currentUser, databaseUser } = useContext(UserContext);
   const { chatId, setChatId } = useContext(ChatContext);
-  const [companies, setCompanies] = useState([]);
+  const [companies, setCompanies] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [allMessage, setAllMessages] = useState({ send: [], receive: [] });
+  const [messages, setMessages] = useState([]);
   const [usersCollection, setUsersCollection] = useState([]);
-  const [changeValue, setChangeValue] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      if (chatId != null) {
+      if (chatId != null && currentUser?.email) {
         const list = await getChatUserById(chatId);
-
-        if (currentUser?.email) {
-          const sendMSG = await getMessage(currentUser.email, list.email);
-          setAllMessages((prevMessages) => ({
-            ...prevMessages,
-            send: sendMSG,
-          }));
-        }
-
-        const receiveMSG = await getMessage(list.email, currentUser.email);
-        setAllMessages((prevMessages) => ({
-          ...prevMessages,
-          receive: receiveMSG,
-        }));
-
         setCompanies(list);
+        const thread = await getConversation(list.email);
+        setMessages(thread || []);
       }
       setIsLoading(false);
     };
 
     fetchData();
-  }, [currentUser, chatId, changeValue]);
+  }, [currentUser, chatId]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (value.trim() === "") {
+    if (value.trim() === "" || !companies?.email || !currentUser) {
       return;
     }
-    const data = {
-      sender: {
-        name: currentUser.displayName,
-        photoURL: currentUser.photoURL,
-        email: currentUser.email,
-      },
-      receiver: {
-        name: companies.displayName,
-        photoURL: companies.photoURL,
-        email: companies.email,
-      },
+    const payload = {
+      receiverEmail: companies.email,
       message: value,
-      createdAt: serverTimestamp(),
     };
     setValue("");
-    const valueSet = await sendMessage(data);
-    if (chatId != null) {
-      const list = await getChatUserById(chatId);
-
-      if (currentUser?.email) {
-        const sendMSG = await getMessage(currentUser.email, list.email);
-        setAllMessages((prevMessages) => ({
-          ...prevMessages,
-          send: sendMSG,
-        }));
-      }
-
-      const receiveMSG = await getMessage(list.email, currentUser.email);
-      setAllMessages((prevMessages) => ({
-        ...prevMessages,
-        receive: receiveMSG,
-      }));
-
-      setCompanies(list);
-    }
+    await sendMessage(payload);
+    const thread = await getConversation(companies.email);
+    setMessages(thread || []);
 
     const messagesContainer = messagesContainerRef.current;
     if (messagesContainer) {
@@ -109,12 +66,15 @@ const ChatBox = () => {
 
   useEffect(() => {
     const getUser = async () => {
-      const user = auth.currentUser;
-      const users = await getChatUsers(user);
+      if (!currentUser) return;
+      const users = await getChatUsers();
       setUsersCollection(users);
     };
     getUser();
-  }, []);
+  }, [currentUser]);
+
+  const defaultAvatar =
+    "https://static.vecteezy.com/system/resources/thumbnails/020/765/399/small/default-profile-account-unknown-icon-black-silhouette-free-vector.jpg";
 
   return (
     <>
@@ -130,7 +90,7 @@ const ChatBox = () => {
             >
               <div className="w-1/4 ">
                 <img
-                  src={databaseUser.photoURL}
+                  src={databaseUser?.photoURL || defaultAvatar}
                   className="object-cover  h-12 w-12 rounded-full"
                   alt=""
                 />
@@ -167,7 +127,10 @@ const ChatBox = () => {
               ) : (
                 usersCollection.map((index) => {
                   return (
-                    <div className="flex flex-row py-4 px-3 justify-center items-center border-b">
+                    <div
+                      className="flex flex-row py-4 px-3 justify-center items-center border-b"
+                      key={index.id}
+                    >
                       <div className="w-1/4">
                         <img
                           src={index.photoURL}
@@ -212,7 +175,7 @@ const ChatBox = () => {
                       <div className="relative">
                         {companies && (
                           <img
-                            src={companies.photoURL}
+                            src={companies.photoURL || defaultAvatar}
                             alt=""
                             className="w-16 "
                           />
@@ -220,16 +183,20 @@ const ChatBox = () => {
                       </div>
                       <div className="flex flex-col leading-tight">
                         <div className="text-2xl mt-1 flex items-center">
-                          <Link
-                            to={`/companies/${companies.id}`}
-                            className="text-gray-700 mr-3"
-                          >
-                            {companies && companies.displayName}
-                          </Link>
+                          {companies && (
+                            <Link
+                              to={`/companies/${companies.id}`}
+                              className="text-gray-700 mr-3"
+                            >
+                              {companies.displayName}
+                            </Link>
+                          )}
                         </div>
-                        <span className="text-sm text-gray-600">
-                          {companies.category}
-                        </span>
+                        {companies && (
+                          <span className="text-sm text-gray-600">
+                            {companies.category}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -239,23 +206,21 @@ const ChatBox = () => {
                     className=" flex flex-col space-y-4 p-3 overflow-y-auto scrollbar-thumb-blue scrollbar-thumb-rounded scrollbar-track-blue-lighter scrollbar-w-2 scrolling-touch"
                     style={{ height: 500 }}
                   >
-                    {Array.isArray(allMessage.send) &&
-                      Array.isArray(allMessage.receive) &&
-                      [...allMessage.send, ...allMessage.receive]
-                        .sort((a, b) => a.createdAt - b.createdAt)
-                        .map((message) =>
-                          message.sender.email === currentUser.email ? (
-                            <SendingMessages
-                              key={message.id}
-                              message={message}
-                            />
-                          ) : (
-                            <RecievingMessage
-                              key={message.id}
-                              message={message}
-                            />
-                          )
-                        )}
+                    {Array.isArray(messages) &&
+                      currentUser &&
+                      messages.map((message) =>
+                        message.sender.email === currentUser.email ? (
+                          <SendingMessages
+                            key={message._id || message.id}
+                            message={message}
+                          />
+                        ) : (
+                          <RecievingMessage
+                            key={message._id || message.id}
+                            message={message}
+                          />
+                        )
+                      )}
                   </div>
                   <div className="px-4 pt-4 mb-2 sm:mb-0 border-t border-black">
                     <form

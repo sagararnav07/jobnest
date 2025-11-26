@@ -1,15 +1,10 @@
 import React, { useContext, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
-import {
-  db,
-  signInAuthUserWithEmailAndPassword,
-  signInWithGooglePopup,
-} from "../../firebase/firebase";
+import { signInAuthUserWithEmailAndPassword } from "../../firebase/firebase";
 import Modal from "../../components/alert/dialog-modal";
 import Loading from "../../components/alert/loading";
 import { UserContext } from "../../context/user-context";
-import { doc, updateDoc } from "firebase/firestore";
 
 const formFeild = {
   email: "",
@@ -37,7 +32,7 @@ function Login() {
   const location = useLocation();
   const [rememberMe, setRememberMe] = useState(false);
 
-  const { setCurrentUser } = useContext(UserContext);
+  const { setCurrentUser, setDatabaseUser } = useContext(UserContext);
 
   const isEmailValid = (email) => {
     const emailPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
@@ -70,31 +65,10 @@ function Login() {
     }
     setIsLoading(true);
     try {
-      const userCredential = await signInAuthUserWithEmailAndPassword(
-        email,
-        password
-      );
+      const { user } = await signInAuthUserWithEmailAndPassword(email, password);
 
-      if (!userCredential.user.emailVerified) {
-        setIsLoading(false);
-        setOpen(true);
-        setMessage("Please verify your email before logging in.");
-        setButtonMesage("OK");
-        setErrorMessage("error");
-        setData({ ...data, password: "" });
-        return;
-      }
-      const userDocRef = doc(db, "users", userCredential.user.uid);
-
-      try {
-        await updateDoc(userDocRef, {
-          emailVerified: true,
-        });
-      } catch (error) {
-        console.error("Error updating email verification status:", error);
-      }
-
-      setCurrentUser(userCredential);
+      setCurrentUser(user);
+      setDatabaseUser(user);
       setData(formFeild);
       setErrorCheck(check);
       setIsLoading(false);
@@ -107,33 +81,6 @@ function Login() {
       setData({ ...data, password: "" });
       setErrorCheck(check);
     }
-  };
-
-  const googleLogin = async () => {
-    setIsLoading(true);
-    try {
-      const { user } = await signInWithGooglePopup({
-        userPhone: "",
-        category: "",
-        emailVerified: true,
-        address: {
-          country: "",
-          street: "",
-          city: "",
-          state: "",
-          zip: "",
-        },
-      });
-
-      setCurrentUser(user);
-
-      setIsLoading(false);
-    } catch (error) {
-      console.log(error.message);
-      setIsLoading(false);
-    }
-
-    setIsLoading(false);
   };
 
   const [loginOpen, setLoginOpen] = useState(false);
@@ -328,28 +275,6 @@ function Login() {
                 </p>
               </div>
             </form>
-            <div className="w-full flex items-center justify-between my-10 sm:my-8">
-              <hr className="w-full bg-gray-400" />
-              <p className="text-base font-medium leading-4 px-2.5 text-gray-400">
-                OR
-              </p>
-              <hr className="w-full bg-gray-400  " />
-            </div>
-
-            <button
-              className="max-sm:w-full focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-700 py-3.5 px-4 border rounded-lg border-gray-700 flex items-center "
-              onClick={googleLogin}
-            >
-              <img
-                className="w-6 h-6"
-                src="https://www.svgrepo.com/show/475656/google-color.svg"
-                loading="lazy"
-                alt="google logo"
-              />
-              <p className="text-base font-medium ml-4 text-gray-700">
-                Continue with Google
-              </p>
-            </button>
           </div>
         </main>
       </div>

@@ -1,10 +1,14 @@
-import React, { useContext, useEffect } from "react";
+import React, { useContext } from "react";
 import ChatBox from "./ChatBox";
 import { UserContext } from "../../context/user-context";
-import { Navigate, useParams } from "react-router";
+import { Navigate } from "react-router";
 
 const Chat = () => {
   const { currentUser } = useContext(UserContext);
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <div>

@@ -3,13 +3,7 @@ import { PencilSquareIcon, PhotoIcon } from "@heroicons/react/24/outline";
 import { UserContext } from "../../context/user-context";
 import Modal from "../alert/dialog-modal";
 import Loading from "../alert/loading";
-import {
-  auth,
-  getUserDocument,
-  updateCompanyInJobs,
-  updateUserDocument,
-} from "../../firebase/firebase";
-import { updateProfile } from "firebase/auth";
+import { getUserDocument, updateUserDocument } from "../../firebase/firebase";
 import { UserDetailsContext } from "../../context/user-details";
 import { generateReportProfile } from "../../pdf/nasmi.pdf";
 
@@ -40,20 +34,27 @@ const form = {
 };
 
 function MyProfile() {
-  const { currentUser, setDatabaseUser } = useContext(UserContext);
-  const { photoURL } = currentUser;
+  const { currentUser, setDatabaseUser, setCurrentUser } =
+    useContext(UserContext);
+  const photoURL = currentUser?.photoURL;
   const [isEdit, setIsEdit] = useState(false);
   const [dataUser, setDatauser] = useState({});
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const user = auth.currentUser;
   const [editedUserData, setEditedUserData] = useState(form);
   const [error, setError] = useState(check);
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      const userData = await getUserDocument(user);
+      const userData = await getUserDocument();
+      const safeAddress = userData.address || {
+        country: "",
+        street: "",
+        city: "",
+        state: "",
+        zip: "",
+      };
       setEditedUserData({
         email: userData.email,
         userPhone: userData.userPhone,
@@ -61,11 +62,11 @@ function MyProfile() {
         first_name: userData.first_name,
         last_name: userData.last_name,
         address: {
-          country: userData.address.country,
-          street: userData.address.street,
-          city: userData.address.city,
-          state: userData.address.state,
-          zip: userData.address.zip,
+          country: safeAddress.country,
+          street: safeAddress.street,
+          city: safeAddress.city,
+          state: safeAddress.state,
+          zip: safeAddress.zip,
         },
       });
       setDatauser(userData);
@@ -177,25 +178,11 @@ function MyProfile() {
 
     setIsLoading(true);
     try {
-      if (category === "company") {
-        await updateProfile(user, { displayName: editedUserData.displayName });
-        await updateCompanyInJobs(currentUser.email, {
-          displayName: editedUserData.displayName,
-          address: editedUserData.address,
-          first_name: editedUserData.first_name,
-          last_name: editedUserData.last_name,
-          userPhone: editedUserData.userPhone,
-        });
-      } else if (category !== "company") {
-        await updateProfile(user, {
-          displayName:
-            editedUserData.first_name + " " + editedUserData.last_name,
-        });
-      }
-      await updateUserDocument(user, editedUserData);
-      const userData = await getUserDocument(user);
+      await updateUserDocument(editedUserData);
+      const userData = await getUserDocument();
       setDetails(userData);
       setDatabaseUser(userData);
+      setCurrentUser(userData);
       setError(check);
       setIsLoading(false);
       setOpen(true);
@@ -221,6 +208,7 @@ function MyProfile() {
     setErrorMessage("error");
   };
   const reportGenerate = () => {
+    if (!currentUser) return;
     generateReportProfile(currentUser);
   };
 

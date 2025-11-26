@@ -6,7 +6,6 @@ import { Link, useLocation } from "react-router-dom";
 import { UserContext } from "../../context/user-context";
 import Modal from "../alert/dialog-modal";
 
-import { auth } from "../../firebase/firebase";
 import { Bars3Icon } from "@heroicons/react/24/outline";
 
 function Navbar() {
@@ -14,15 +13,20 @@ function Navbar() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [imageURL, setImageURL] = useState("");
+  const defaultAvatar =
+    "https://static.vecteezy.com/system/resources/thumbnails/020/765/399/small/default-profile-account-unknown-icon-black-silhouette-free-vector.jpg";
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (user) {
-      setDisplayName(user.displayName);
-      setEmail(user.email);
-      setImageURL(user.photoURL);
+    if (currentUser) {
+      setDisplayName(currentUser.displayName);
+      setEmail(currentUser.email);
+      setImageURL(currentUser.photoURL);
+    } else {
+      setDisplayName("");
+      setEmail("");
+      setImageURL("");
     }
-  }, [databaseUser]);
+  }, [currentUser]);
 
   const [profileView, setProfileView] = useState(false);
   const [menuBar, setMenuBar] = useState(false);
@@ -116,7 +120,7 @@ function Navbar() {
                     <span className="sr-only">Open user menu</span>
                     <img
                       className="w-8 h-8 rounded-full"
-                      src={imageURL}
+                      src={imageURL || defaultAvatar}
                       alt="ProfilePic"
                     />
                   </Menu.Button>

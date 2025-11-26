@@ -140,7 +140,7 @@ function JobPost() {
     setError(check);
 
     try {
-      await postJob(details, data);
+      await postJob(data);
 
       setData(formFeild);
       setOpen(true);

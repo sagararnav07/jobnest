@@ -83,8 +83,8 @@ function Review({ company }) {
           description: review,
         };
 
-        await createReview(newReview);
-        setReviews([...reviews, newReview]);
+        const createdReview = await createReview(newReview);
+        setReviews([...reviews, createdReview]);
 
         resetForm(e);
       } else {
@@ -116,6 +116,7 @@ function Review({ company }) {
     }
   };
   const reportGenerate = () => {
+    if (!currentUser) return;
     generateReportReview(currentUser.email);
   };
 

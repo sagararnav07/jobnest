@@ -62,7 +62,7 @@ function Sign() {
   };
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
+    event.preventDefault(); 
 
     const {
       first_name,

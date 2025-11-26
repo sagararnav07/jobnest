@@ -1,6 +1,6 @@
-import { createContext, useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
+import { createContext, useCallback, useEffect, useState } from "react";
 import { getUserDocument } from "../firebase/firebase";
+import { loadStoredToken, setAuthToken } from "../lib/api";
 
 export const UserContext = createContext({
   currentUser: null,
@@ -13,7 +13,32 @@ export const UserContext = createContext({
 export const UserProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [databaseUser, setDatabaseUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const bootstrapUser = useCallback(async () => {
+    const token = loadStoredToken();
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
+    try {
+      const profile = await getUserDocument();
+      setCurrentUser(profile);
+      setDatabaseUser(profile);
+    } catch (error) {
+      console.error(error);
+      setAuthToken(null);
+      setCurrentUser(null);
+      setDatabaseUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    bootstrapUser();
+  }, [bootstrapUser]);
+
   const value = {
     currentUser,
     setCurrentUser,
@@ -21,25 +46,6 @@ export const UserProvider = ({ children }) => {
     setDatabaseUser,
     isLoading,
   };
-
-  useEffect(() => {
-    const unsubscribe = getAuth().onAuthStateChanged(async (user) => {
-      setIsLoading(true);
-      if (user) {
-        if (user.emailVerified) {
-          setCurrentUser(user);
-          const userData = await getUserDocument(user);
-          setDatabaseUser(userData);
-        }
-      } else {
-        setCurrentUser(null);
-        setDatabaseUser(null);
-      }
-      setIsLoading(false);
-    });
-
-    return unsubscribe;
-  }, []);
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 };

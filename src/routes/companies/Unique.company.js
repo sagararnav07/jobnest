@@ -21,7 +21,7 @@ function SingleCompany() {
       setIsLoading(true);
       const list = await getCompanyUserById(companyId);
       setCompany(list);
-      setAddress(list.address);
+      setAddress(list?.address || {});
       setIsLoading(false);
     };
     fetchData();

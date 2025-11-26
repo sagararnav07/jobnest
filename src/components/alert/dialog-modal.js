@@ -4,10 +4,10 @@ import {
   ExclamationTriangleIcon,
   CheckCircleIcon,
 } from "@heroicons/react/24/outline";
-import { getAuth } from "firebase/auth";
 import { UserContext } from "../../context/user-context";
 import { useNavigate } from "react-router";
 import { UserDetailsContext } from "../../context/user-details";
+import { signOutUser } from "../../firebase/firebase";
 
 function Modal({
   message,
@@ -34,7 +34,7 @@ function Modal({
   const navigate = useNavigate();
 
   const signOutHandler = async () => {
-    await getAuth().signOut();
+    await signOutUser();
     setOpen(false);
     setDatabaseUser(null);
     setCurrentUser(null);

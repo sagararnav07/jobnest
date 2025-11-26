@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { UserContext } from "./user-context";
-import { auth, getUserDocument } from "../firebase/firebase";
+import { getUserDocument } from "../firebase/firebase";
 
 export const UserDetailsContext = createContext({
   details: "",
@@ -13,16 +13,20 @@ export const UserDetailsProvider = ({ children }) => {
   const { currentUser } = useContext(UserContext);
 
   useEffect(() => {
-    const check = async () => {
-      if (currentUser) {
-        const user = auth.currentUser;
-        if (user) {
-          const data = await getUserDocument(user);
-          setDetails(data);
-        }
+    const fetchDetails = async () => {
+      if (!currentUser) {
+        setDetails({});
+        return;
+      }
+      try {
+        const data = await getUserDocument();
+        setDetails(data);
+      } catch (error) {
+        console.error(error);
+        setDetails({});
       }
     };
-    check();
+    fetchDetails();
   }, [currentUser]);
 
   const value = { details, setDetails };

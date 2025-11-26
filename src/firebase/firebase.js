@@ -1,492 +1,171 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendEmailVerification,
-  updateProfile,
-  GoogleAuthProvider,
-  signInWithPopup,
-  sendPasswordResetEmail,
-} from "firebase/auth";
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  where,
-  updateDoc,
-  deleteDoc,
-  orderBy,
-  limit,
-  Firestore,
-} from "firebase/firestore";
-
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyAXclEjCY3wNV4w_3N9p_vcD0O9zOJhlPE",
-  authDomain: "job-nest-c6632.firebaseapp.com",
-  projectId: "job-nest-c6632",
-  storageBucket: "job-nest-c6632.appspot.com",
-  messagingSenderId: "820734348710",
-  appId: "1:820734348710:web:cbc0614ed406956516d367",
-};
-
-// Initialize Firebase
-initializeApp(firebaseConfig);
-
-export const auth = getAuth();
-export const db = getFirestore();
-const provider = new GoogleAuthProvider();
-
-provider.setCustomParameters({
-  prompt: "select_account",
-});
-
-export const signInWithGooglePopup = async (additional) => {
-  try {
-    const userCredential = await signInWithPopup(auth, provider);
-    await createUserDocumentFromAuth(userCredential.user, additional);
-
-    return userCredential;
-  } catch (error) {
-    console.log(error.message);
-  }
-};
-
-export const forgetPassword = async (email) => {
-  await sendPasswordResetEmail(auth, email);
-};
+import api, { setAuthToken, unwrap } from "../lib/api";
 
 export const createAuthUserWithEmailAndPassword = async (
   email,
   password,
   displayName,
   photoURL,
-  additional
+  additional = {}
 ) => {
-  if (!email || !password) return;
-
-  const userCredential = await createUserWithEmailAndPassword(
-    auth,
+  const payload = {
     email,
-    password
-  );
-
-  await updateProfile(userCredential.user, {
-    displayName: displayName,
-    photoURL: photoURL,
-  });
-
-  await createUserDocumentFromAuth(userCredential.user, additional);
-
-  await sendEmailVerification(userCredential.user);
-
-  return userCredential;
+    password,
+    displayName,
+    photoURL,
+    ...additional,
+  };
+  const data = await unwrap(api.post("/auth/register", payload));
+  setAuthToken(data.token);
+  return data;
 };
 
 export const signInAuthUserWithEmailAndPassword = async (email, password) => {
-  if (!email || !password) return;
-
-  const userCredential = await signInWithEmailAndPassword(
-    auth,
-    email,
-    password
-  );
-
-  return userCredential;
+  const data = await unwrap(api.post("/auth/login", { email, password }));
+  setAuthToken(data.token);
+  return data;
 };
 
-export const createUserDocumentFromAuth = async (userAuth, addtional) => {
-  if (!userAuth) return;
+export const signOutUser = async () => {
+  await unwrap(api.post("/auth/logout"));
+  setAuthToken(null);
+};
 
-  const userDocRef = doc(db, "users", userAuth.uid);
+export const forgetPassword = async (email) => {
+  await unwrap(api.post("/auth/forgot-password", { email }));
+  return true;
+};
 
-  const userSnapshot = await getDoc(userDocRef);
+export const getUserDocument = async () => {
+  const data = await unwrap(api.get("/users/me"));
+  return data.user;
+};
 
-  if (!userSnapshot.exists()) {
-    const { displayName, email, photoURL } = userAuth;
-    const createdAt = new Date();
-
-    try {
-      await setDoc(userDocRef, {
-        displayName,
-        photoURL,
-        email,
-        createdAt,
-        ...addtional,
-      });
-    } catch (error) {
-      console.log("error creating the user", error.message);
-    }
-  }
-
-  return userDocRef;
+export const updateUserDocument = async (updatedData) => {
+  const data = await unwrap(api.patch("/users/me", updatedData));
+  return data.user;
 };
 
 export const getCompanyUsers = async () => {
-  try {
-    const usersCollectionRef = collection(db, "users");
-    const querySnapshot = await getDocs(
-      query(
-        usersCollectionRef,
-        where("category", "==", "company"),
-        where("emailVerified", "==", true)
-      )
-    );
-
-    const companyUsers = [];
-    querySnapshot.forEach((doc) => {
-      companyUsers.push({ id: doc.id, ...doc.data() });
-    });
-
-    return companyUsers;
-  } catch (error) {
-    console.error("Error fetching verified company users:", error);
-    return [];
-  }
-};
-
-export const getChatUsers = async (userAuth) => {
-  try {
-    const usersCollectionRef = collection(db, "users");
-    const querySnapshot = await getDocs(
-      query(usersCollectionRef, where("emailVerified", "==", true))
-    );
-    const users = [];
-    const currentUserUid = userAuth.uid; // assuming 'uid' is the identifier
-
-    querySnapshot.forEach((doc) => {
-      const userData = { id: doc.id, ...doc.data() };
-      // Exclude the current user
-      if (userData.id !== currentUserUid) {
-        users.push(userData);
-      }
-    });
-
-    return users;
-  } catch (error) {
-    console.error("Error fetching verified users:", error);
-    return [];
-  }
+  const data = await unwrap(
+    api.get("/users/companies", { params: { verified: true } })
+  );
+  return data.companies;
 };
 
 export const getCompanyUserById = async (userId) => {
-  try {
-    const userDocRef = doc(db, "users", userId);
-    const userDocSnapshot = await getDoc(userDocRef);
+  const data = await unwrap(api.get(`/users/companies/${userId}`));
+  return { id: data.company._id, ...data.company };
+};
 
-    if (
-      userDocSnapshot.exists() &&
-      userDocSnapshot.data().category === "company" &&
-      userDocSnapshot.data().emailVerified
-    ) {
-      return { id: userDocSnapshot.id, ...userDocSnapshot.data() };
-    } else {
-      console.log("Company user not found or not verified");
-      return null;
-    }
-  } catch (error) {
-    console.error("Error fetching company user details:", error);
-    return null;
-  }
+export const getChatUsers = async () => {
+  const data = await unwrap(api.get("/users/chat/users"));
+  return data.users.map((user) => ({ id: user._id, ...user }));
 };
 
 export const getChatUserById = async (userId) => {
-  try {
-    const userDocRef = doc(db, "users", userId);
-    const userDocSnapshot = await getDoc(userDocRef);
-
-    if (userDocSnapshot.exists() && userDocSnapshot.data().emailVerified) {
-      return { id: userDocSnapshot.id, ...userDocSnapshot.data() };
-    } else {
-      console.log("Company user not found or not verified");
-      return null;
-    }
-  } catch (error) {
-    console.error("Error fetching company user details:", error);
-    return null;
-  }
+  const data = await unwrap(api.get(`/users/${userId}`));
+  return { id: data.user._id, ...data.user };
 };
 
-export const getUserDocument = async (userAuth) => {
-  if (!userAuth) return null;
-
-  const userDocRef = doc(db, "users", userAuth.uid);
-  const userSnapshot = await getDoc(userDocRef);
-
-  if (userSnapshot.exists()) {
-    const userData = userSnapshot.data();
-    return userData;
-  }
-
-  return null;
+export const postJob = async (jobData) => {
+  const data = await unwrap(api.post("/jobs", jobData));
+  return { id: data.job._id, ...data.job };
 };
 
-export const updateUserDocument = async (userAuth, updatedData) => {
-  if (!userAuth) return null;
+const mapJobResponse = (job) => ({
+  id: job._id,
+  job: {
+    title: job.title,
+    description: job.description,
+    type: job.type,
+    experienceLevel: job.experienceLevel,
+    requirements: job.requirements,
+    responsibilities: job.responsibilities,
+    salary: job.salary,
+    applicationDeadline: job.applicationDeadline,
+    searchKeywords: job.searchKeywords,
+  },
+  company: job.company,
+});
 
-  const userDocRef = doc(db, "users", userAuth.uid);
-
-  try {
-    await setDoc(userDocRef, updatedData, { merge: true });
-    return true;
-  } catch (error) {
-    console.error("Error updating user document:", error);
-    return false;
-  }
-};
-
-export const updateCompanyInJobs = async (email, updatedData) => {
-  try {
-    const jobsCollectionRef = collection(db, "jobs");
-    const q = query(jobsCollectionRef, where("company.email", "==", email));
-    const querySnapshot = await getDocs(q);
-
-    querySnapshot.forEach(async (doc) => {
-      const docRef = doc.ref;
-      const jobData = doc.data();
-
-      jobData.company = { ...jobData.company, ...updatedData };
-
-      await updateDoc(docRef, jobData);
-    });
-
-    return true;
-  } catch (error) {
-    console.error("Error updating company details in Jobs:", error);
-    return false;
-  }
-};
-
-export const postJob = async (userAuth, jobData) => {
-  if (!userAuth) return;
-  try {
-    const jobsCollectionRef = collection(db, "jobs");
-
-    const newJobDocRef = await addDoc(jobsCollectionRef, {
-      job: jobData,
-      company: userAuth,
-    });
-
-    return newJobDocRef;
-  } catch (error) {
-    console.log("Error creating the job", error.message);
-    return null;
-  }
-};
-
-export const getJob = async () => {
-  const jobsCollectionRef = collection(db, "jobs");
-
-  try {
-    const querySnapshot = await getDocs(jobsCollectionRef);
-
-    const jobs = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      job: doc.data().job,
-      company: doc.data().company,
-    }));
-
-    return jobs;
-  } catch (error) {
-    console.log("Error fetching jobs", error.message);
-    return null;
-  }
+export const getJob = async (params = {}) => {
+  const data = await unwrap(api.get("/jobs", { params }));
+  return data.jobs.map(mapJobResponse);
 };
 
 export const getJobByUserEmail = async (email) => {
-  try {
-    const jobsCollectionRef = collection(db, "jobs");
-    const q = query(jobsCollectionRef, where("company.email", "==", email));
-    const querySnapshot = await getDocs(q);
-
-    const jobs = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-
-      job: doc.data().job,
-      company: doc.data().company,
-    }));
-
-    return jobs;
-  } catch (error) {
-    console.error("Error fetching jobs:", error.message);
-    return null;
-  }
+  const data = await unwrap(api.get("/jobs", { params: { companyEmail: email } }));
+  return data.jobs.map(mapJobResponse);
 };
 
 export const getJobById = async (jobId) => {
-  try {
-    const jobDocRef = doc(db, "jobs", jobId);
-    const jobDocSnapshot = await getDoc(jobDocRef);
-
-    if (jobDocSnapshot.exists()) {
-      return jobDocSnapshot.data();
-    } else {
-      console.log("Job not found");
-      return null;
-    }
-  } catch (error) {
-    console.error("Error fetching job details:", error);
-    return null;
-  }
+  const data = await unwrap(api.get(`/jobs/${jobId}`));
+  return mapJobResponse(data.job);
 };
-export const deleteJobById = async (jobId) => {
-  try {
-    const jobDocRef = doc(db, "jobs", jobId);
-    const jobDocSnapshot = await getDoc(jobDocRef);
 
-    if (jobDocSnapshot.exists()) {
-      await deleteDoc(jobDocRef);
-      return true;
-    } else {
-      console.log("Job not found");
-      return false;
-    }
-  } catch (error) {
-    console.error("Error deleting job:", error);
-    return false;
-  }
+export const deleteJobById = async (jobId) => {
+  await unwrap(api.delete(`/jobs/${jobId}`));
+  return true;
 };
 
 export const getJobByTitle = async (jobTitle) => {
-  const jobsCollectionRef = collection(db, "jobs");
-
-  try {
-    const lowercaseJobTitle = jobTitle.toLowerCase();
-
-    const q = query(
-      jobsCollectionRef,
-      where("job.searchKeywords", "array-contains", lowercaseJobTitle)
-    );
-
-    const querySnapshot = await getDocs(q);
-
-    const jobs = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      job: doc.data().job,
-      company: doc.data().company,
-    }));
-
-    return jobs;
-  } catch (error) {
-    console.log("Error fetching jobs", error.message);
-    return null;
-  }
+  if (!jobTitle) return getJob();
+  const data = await unwrap(api.get("/jobs", { params: { search: jobTitle } }));
+  return data.jobs.map(mapJobResponse);
 };
 
 export const getJobFilter = async (sectionId, optionValue) => {
-  try {
-    const jobsCollectionRef = collection(db, "jobs");
-    const q = query(
-      jobsCollectionRef,
-      where(`job.${sectionId}`, "==", optionValue)
-    );
-    const querySnapshot = await getDocs(q);
-
-    const jobs = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      job: doc.data().job,
-      company: doc.data().company,
-    }));
-
-    return jobs;
-  } catch (error) {
-    console.log("Error fetching jobs", error.message);
-    return null;
-  }
+  const data = await unwrap(
+    api.get("/jobs", { params: { [sectionId]: optionValue } })
+  );
+  return data.jobs.map(mapJobResponse);
 };
 
-export const sendMessage = async (data) => {
-  try {
-    await addDoc(collection(db, "messages"), data);
-    return true;
-  } catch (error) {
-    console.error("Error updating document: ", error);
-    return false;
-  }
+export const getJobByUserEmailReport = getJobByUserEmail;
+
+export const sendMessage = async ({ receiverEmail, message }) => {
+  const data = await unwrap(
+    api.post("/messages", {
+      receiverEmail,
+      message,
+    })
+  );
+  return data.message;
 };
 
-export const getMessage = async (senderEmail, recieverEmail) => {
-  try {
-    const messageCollectionRef = collection(db, "messages");
-    const q = query(
-      messageCollectionRef,
-      where("sender.email", "==", senderEmail),
-      where("receiver.email", "==", recieverEmail),
-      orderBy("createdAt"),
-      limit(50)
-    );
-
-    const querySnapshot = await getDocs(q);
-
-    const messages = querySnapshot.docs.map((doc) => ({
-      ...doc.data(),
-      id: doc.id,
-    }));
-
-    return messages;
-  } catch (error) {
-    console.error("Error fetching messages:", error.message);
-    return null;
-  }
+export const getConversation = async (participantEmail) => {
+  const data = await unwrap(
+    api.get("/messages", { params: { participantEmail } })
+  );
+  return data.messages;
 };
 
 export const createReview = async (newReview) => {
-  try {
-    const reviewsCollection = collection(db, "reviews");
-    await addDoc(reviewsCollection, newReview);
-  } catch (error) {
-    console.error("Error creating on review:", error.message);
-  }
+  const data = await unwrap(api.post("/reviews", newReview));
+  return { id: data.review._id, ...data.review };
 };
+
 export const deleteReview = async (reviewId) => {
-  try {
-    const reviewRef = doc(db, "reviews", reviewId);
-    await deleteDoc(reviewRef);
-  } catch (error) {
-    console.error("Error deleting review:", error.message);
-    throw error;
-  }
+  await unwrap(api.delete(`/reviews/${reviewId}`));
 };
 
 export const getReviewsByEmail = async (email) => {
-  try {
-    const reviewsCollection = collection(db, "reviews");
-    const querySnapshot = await getDocs(
-      query(reviewsCollection, where("recieverEmail", "==", email))
-    );
-
-    const reviews = querySnapshot.docs.map((doc) => doc.data());
-
-    return reviews;
-  } catch (error) {
-    console.error("Error fetching reviews by email:", error.message);
-    return null;
-  }
+  const data = await unwrap(api.get("/reviews", { params: { email } }));
+  return data.reviews.map((review) => ({ id: review._id, ...review }));
 };
 
-
 export const getReviewsByEmailReport = async (email) => {
-  try {
-    const reviewsCollection = collection(db, "reviews");
-    const querySnapshot = await getDocs(
-      query(reviewsCollection, where("userEmail", "==", email))
-    );
+  const data = await unwrap(api.get(`/reviews/user/${email}`));
+  return data.reviews.map((review) => ({ id: review._id, ...review }));
+};
 
-    const reviews = querySnapshot.docs.map((doc) => doc.data());
-
-    return reviews;
-  } catch (error) {
-    console.error("Error fetching reviews by email:", error.message);
-    return null;
-  }
+export const uploadFile = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const data = await unwrap(
+    api.post("/uploads", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+  );
+  return data;
 };
